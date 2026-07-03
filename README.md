@@ -5,6 +5,12 @@ content in PostgreSQL, generates static sites with a built-in Go generator,
 pushes them to one GitHub repository per website, and lets Cloudflare Pages
 host them. Built to the requirements in [spec.md](spec.md).
 
+Content is fully schema-driven: each tenant owns an editable library of
+**block types** (custom fields + layout hints), seeded from a starter set.
+Pages are composed in a **drag-and-drop block builder** (palette → canvas →
+inspector, with live preview), and the static generator auto-renders any
+block type from its schema — no per-type templates, no user HTML.
+
 ## Quick start
 
 ```bash
@@ -77,7 +83,7 @@ every SQL query (`tenant_id` filter).
 cmd/server/          entrypoint, admin bootstrap
 internal/config/     env config (.env supported)
 internal/db/         pgx pool + embedded SQL migrations
-internal/models/     entities + section type schemas
+internal/models/     entities + block schema validation + starter library
 internal/httpapi/    REST API handlers + auth middleware
 internal/auth/       JWT + bcrypt + refresh tokens
 internal/cache/      Redis or in-memory (locks, rate limits, preview tokens)
