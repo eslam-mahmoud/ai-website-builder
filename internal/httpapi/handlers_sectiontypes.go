@@ -183,12 +183,20 @@ func (s *Server) handleArchiveSectionType(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// sectionTypeExists checks that a type_key is an active block type of the tenant.
-func (s *Server) sectionTypeExists(r *http.Request, tenantID, typeKey string) bool {
-	var ok bool
+// sectionTypeFields returns the field schema of a tenant's active block
+// type, or ok=false if the type doesn't exist.
+func (s *Server) sectionTypeFields(r *http.Request, tenantID, typeKey string) ([]models.FieldSpec, bool) {
+	var fieldsJSON []byte
 	err := s.pool.QueryRow(r.Context(), `
-		SELECT EXISTS (SELECT 1 FROM section_types
-		WHERE tenant_id = $1 AND type_key = $2 AND status = 'active')`,
-		tenantID, typeKey).Scan(&ok)
-	return err == nil && ok
+		SELECT fields_json FROM section_types
+		WHERE tenant_id = $1 AND type_key = $2 AND status = 'active'`,
+		tenantID, typeKey).Scan(&fieldsJSON)
+	if err != nil {
+		return nil, false
+	}
+	var fields []models.FieldSpec
+	if json.Unmarshal(fieldsJSON, &fields) != nil {
+		return nil, false
+	}
+	return fields, true
 }

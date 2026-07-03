@@ -103,6 +103,12 @@ async function loadSectionTypes() {
   S.sectionTypes = await api(tenantPath("/section-types"));
 }
 
+/* getMedia caches the tenant's media list; pass force=true after mutations. */
+async function getMedia(force) {
+  if (!S.mediaCache || force) S.mediaCache = await api(tenantPath("/media"));
+  return S.mediaCache;
+}
+
 /* ---------- boot ---------- */
 
 async function boot() {
@@ -171,6 +177,7 @@ function render() {
   document.getElementById("tenant-switch").onchange = e => {
     S.tenantId = e.target.value;
     S.sectionTypes = [];
+    S.mediaCache = null;
     localStorage.setItem("cms_tenant", S.tenantId);
     nav("websites");
   };
@@ -882,7 +889,7 @@ async function renderImageField(container, mediaId, onPick) {
   if (mediaId) {
     const img = document.createElement("img");
     img.alt = "";
-    api(tenantPath("/media")).then(items => {
+    getMedia().then(items => {
       const m = items.find(x => x.id === mediaId);
       if (m) img.src = m.public_url;
     }).catch(() => {});
@@ -1110,7 +1117,7 @@ async function renderMediaView(main) {
   document.getElementById("upload-input").onchange = e => uploadFile(e.target.files[0], () => renderMediaView(main));
   const box = document.getElementById("media-box");
   try {
-    const items = await api(tenantPath("/media"));
+    const items = await getMedia(true);
     box.innerHTML = items.length === 0 ? `<div class="empty">No media yet — upload images to use in blocks.</div>`
       : `<div class="media-grid">${items.map(m => mediaCardHTML(m, false)).join("")}</div>`;
     box.querySelectorAll(".media-card").forEach(card => {
@@ -1128,6 +1135,7 @@ async function uploadFile(file, done) {
   fd.append("file", file);
   try {
     await api(tenantPath("/media"), { method: "POST", body: fd });
+    S.mediaCache = null;
     toast("Uploaded " + file.name);
     done && done();
   } catch (e) { toast(e.message, true); }
@@ -1149,13 +1157,17 @@ function mediaDetailModal(m, done) {
   mod.querySelector("#save-alt").onclick = async () => {
     try {
       await api(tenantPath(`/media/${m.id}`), { method: "PATCH", body: { alt_text: mod.querySelector("#alt-input").value } });
+      S.mediaCache = null;
       toast("Saved"); mod.remove(); done && done();
     } catch (e) { toast(e.message, true); }
   };
   mod.querySelector("#del-media").onclick = async () => {
     if (!confirm("Delete this file? Blocks referencing it will lose the image.")) return;
-    try { await api(tenantPath(`/media/${m.id}`), { method: "DELETE" }); mod.remove(); done && done(); }
-    catch (e) { toast(e.message, true); }
+    try {
+      await api(tenantPath(`/media/${m.id}`), { method: "DELETE" });
+      S.mediaCache = null;
+      mod.remove(); done && done();
+    } catch (e) { toast(e.message, true); }
   };
 }
 
@@ -1171,7 +1183,7 @@ function mediaPicker(onPick) {
     <div id="picker-grid">Loading…</div>`);
   const load = async () => {
     try {
-      const items = await api(tenantPath("/media"));
+      const items = await getMedia();
       const images = items.filter(m => m.file_type.startsWith("image/"));
       const grid = mod.querySelector("#picker-grid");
       grid.innerHTML = images.length === 0 ? `<div class="empty">No images uploaded yet.</div>`

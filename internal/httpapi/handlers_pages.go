@@ -161,15 +161,15 @@ func (s *Server) handleReorderPages(w http.ResponseWriter, r *http.Request, ai *
 		writeError(w, http.StatusBadRequest, "page_ids is required")
 		return
 	}
-	websiteID := r.PathValue("websiteID")
-	for i, id := range req.PageIDs {
-		if _, err := s.pool.Exec(r.Context(), `
-			UPDATE pages SET sort_order = $1, updated_at = now()
-			WHERE id = $2 AND website_id = $3 AND tenant_id = $4`,
-			i, id, websiteID, ai.TenantID); err != nil {
-			serverError(w, "reorder pages", err)
-			return
-		}
+	// Single statement so a partial failure can't leave a mangled order.
+	_, err := s.pool.Exec(r.Context(), `
+		UPDATE pages p SET sort_order = u.ord - 1, updated_at = now()
+		FROM unnest($1::uuid[]) WITH ORDINALITY AS u(id, ord)
+		WHERE p.id = u.id AND p.website_id = $2 AND p.tenant_id = $3`,
+		req.PageIDs, r.PathValue("websiteID"), ai.TenantID)
+	if err != nil {
+		serverError(w, "reorder pages", err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -229,17 +229,17 @@ func (s *Server) handleCreateSection(w http.ResponseWriter, r *http.Request, ai 
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if !s.sectionTypeExists(r, ai.TenantID, req.SectionType) {
+	schema, ok := s.sectionTypeFields(r, ai.TenantID, req.SectionType)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown block type")
 		return
 	}
-	if len(req.Content) == 0 {
-		req.Content = json.RawMessage("{}")
-	}
-	if !json.Valid(req.Content) {
-		writeError(w, http.StatusBadRequest, "content must be valid JSON")
+	content, err := models.NormalizeContent(schema, req.Content)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "content must be a valid JSON object")
 		return
 	}
+	req.Content = content
 	sec, err := scanSection(s.pool.QueryRow(r.Context(), `
 		INSERT INTO sections (tenant_id, page_id, section_type, content_json, sort_order)
 		VALUES ($1, $2, $3, $4,
@@ -268,13 +268,31 @@ func (s *Server) handleUpdateSection(w http.ResponseWriter, r *http.Request, ai 
 		writeError(w, http.StatusBadRequest, "status must be visible or hidden")
 		return
 	}
-	if len(req.Content) > 0 && !json.Valid(req.Content) {
-		writeError(w, http.StatusBadRequest, "content must be valid JSON")
-		return
-	}
 	var content any
 	if len(req.Content) > 0 {
-		content = req.Content
+		var typeKey string
+		err := s.pool.QueryRow(r.Context(),
+			`SELECT section_type FROM sections WHERE id = $1 AND tenant_id = $2`,
+			r.PathValue("sectionID"), ai.TenantID).Scan(&typeKey)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "section not found")
+			return
+		}
+		if err != nil {
+			serverError(w, "load section", err)
+			return
+		}
+		if schema, ok := s.sectionTypeFields(r, ai.TenantID, typeKey); ok {
+			normalized, err := models.NormalizeContent(schema, req.Content)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "content must be a valid JSON object")
+				return
+			}
+			content = normalized
+		} else {
+			// Type archived since creation: store as-is rather than wiping.
+			content = req.Content
+		}
 	}
 	sec, err := scanSection(s.pool.QueryRow(r.Context(), `
 		UPDATE sections SET
@@ -320,15 +338,14 @@ func (s *Server) handleReorderSections(w http.ResponseWriter, r *http.Request, a
 		writeError(w, http.StatusBadRequest, "section_ids is required")
 		return
 	}
-	pageID := r.PathValue("pageID")
-	for i, id := range req.SectionIDs {
-		if _, err := s.pool.Exec(r.Context(), `
-			UPDATE sections SET sort_order = $1, updated_at = now()
-			WHERE id = $2 AND page_id = $3 AND tenant_id = $4`,
-			i, id, pageID, ai.TenantID); err != nil {
-			serverError(w, "reorder sections", err)
-			return
-		}
+	_, err := s.pool.Exec(r.Context(), `
+		UPDATE sections s SET sort_order = u.ord - 1, updated_at = now()
+		FROM unnest($1::uuid[]) WITH ORDINALITY AS u(id, ord)
+		WHERE s.id = u.id AND s.page_id = $2 AND s.tenant_id = $3`,
+		req.SectionIDs, r.PathValue("pageID"), ai.TenantID)
+	if err != nil {
+		serverError(w, "reorder sections", err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

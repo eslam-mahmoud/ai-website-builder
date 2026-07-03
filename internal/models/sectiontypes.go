@@ -121,6 +121,50 @@ func validateField(f FieldSpec, seen map[string]bool, allowList bool) error {
 	return nil
 }
 
+// NormalizeContent filters a section's content down to the keys its schema
+// defines (recursing into list items and button objects). Unknown keys —
+// junk from clients or leftovers from schema changes — are dropped, which
+// keeps stored content strictly structured.
+func NormalizeContent(fields []FieldSpec, content json.RawMessage) (json.RawMessage, error) {
+	var data map[string]any
+	if len(content) > 0 {
+		if err := json.Unmarshal(content, &data); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(normalizeMap(fields, data))
+}
+
+func normalizeMap(fields []FieldSpec, data map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, f := range fields {
+		v, ok := data[f.Key]
+		if !ok {
+			continue
+		}
+		switch f.Type {
+		case "contact_info":
+			// Renders from site settings; stores no content.
+		case "button":
+			obj, _ := v.(map[string]any)
+			text, _ := obj["text"].(string)
+			link, _ := obj["link"].(string)
+			out[f.Key] = map[string]any{"text": text, "link": link}
+		case "list":
+			items, _ := v.([]any)
+			cleaned := []any{}
+			for _, it := range items {
+				obj, _ := it.(map[string]any)
+				cleaned = append(cleaned, normalizeMap(f.Fields, obj))
+			}
+			out[f.Key] = cleaned
+		default:
+			out[f.Key] = v
+		}
+	}
+	return out
+}
+
 // CollectMediaIDs extracts media IDs referenced by "image" fields of the
 // given schema in a section's content.
 func CollectMediaIDs(fields []FieldSpec, content json.RawMessage) []string {

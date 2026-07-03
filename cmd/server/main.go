@@ -97,6 +97,8 @@ func main() {
 		}
 	}()
 
+	go janitor(pool, cfg)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
@@ -104,6 +106,36 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+}
+
+// janitor periodically removes expired preview builds from disk and dead
+// refresh tokens from the database.
+func janitor(pool *pgxpool.Pool, cfg *config.Config) {
+	previewsDir := filepath.Join(cfg.DataDir, "previews")
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		_, err := pool.Exec(ctx, `
+			DELETE FROM refresh_tokens
+			WHERE expires_at < now() OR revoked_at < now() - interval '7 days'`)
+		cancel()
+		if err != nil {
+			log.Printf("janitor: clean refresh tokens: %v", err)
+		}
+
+		entries, err := os.ReadDir(previewsDir)
+		if err == nil {
+			cutoff := time.Now().Add(-time.Hour)
+			for _, e := range entries {
+				info, err := e.Info()
+				if err == nil && info.ModTime().Before(cutoff) {
+					if err := os.RemoveAll(filepath.Join(previewsDir, e.Name())); err != nil {
+						log.Printf("janitor: remove preview %s: %v", e.Name(), err)
+					}
+				}
+			}
+		}
+		time.Sleep(time.Hour)
+	}
 }
 
 // bootstrapAdmin creates the initial platform admin on an empty user table.

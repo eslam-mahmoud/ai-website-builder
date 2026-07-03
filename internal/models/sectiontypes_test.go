@@ -90,6 +90,65 @@ func TestValidateSchema(t *testing.T) {
 	}
 }
 
+func TestNormalizeContent(t *testing.T) {
+	fields := []FieldSpec{
+		{Key: "title", Label: "Title", Type: "heading"},
+		{Key: "button", Label: "Button", Type: "button"},
+		{Key: "details", Label: "Details", Type: "contact_info"},
+		{Key: "items", Label: "Items", Type: "list", Fields: []FieldSpec{
+			{Key: "name", Label: "Name", Type: "text"},
+		}},
+	}
+	in := json.RawMessage(`{
+		"title": "Hi", "junk": "drop me", "show_phone": true,
+		"button": {"text": "Go", "link": "/x/", "onclick": "evil()"},
+		"details": {"anything": 1},
+		"items": [{"name": "A", "stale": 2}, {"name": "B"}]
+	}`)
+	out, err := NormalizeContent(fields, in)
+	if err != nil {
+		t.Fatalf("NormalizeContent: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["junk"]; ok {
+		t.Error("unknown key not dropped")
+	}
+	if _, ok := got["show_phone"]; ok {
+		t.Error("legacy key not dropped")
+	}
+	if _, ok := got["details"]; ok {
+		t.Error("contact_info should store no content")
+	}
+	btn := got["button"].(map[string]any)
+	if btn["text"] != "Go" || btn["link"] != "/x/" {
+		t.Errorf("button mangled: %v", btn)
+	}
+	if _, ok := btn["onclick"]; ok {
+		t.Error("extra button key not dropped")
+	}
+	items := got["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("items: %v", items)
+	}
+	if _, ok := items[0].(map[string]any)["stale"]; ok {
+		t.Error("stale item key not dropped")
+	}
+	if got["title"] != "Hi" {
+		t.Errorf("title lost: %v", got)
+	}
+
+	if _, err := NormalizeContent(fields, json.RawMessage(`[1,2]`)); err == nil {
+		t.Error("non-object content should error")
+	}
+	empty, err := NormalizeContent(fields, nil)
+	if err != nil || string(empty) != "{}" {
+		t.Errorf("nil content should normalize to {}: %s %v", empty, err)
+	}
+}
+
 func TestStarterSectionTypesAreValid(t *testing.T) {
 	for _, st := range StarterSectionTypes {
 		if err := ValidateSchema(st.Fields, st.Layout); err != nil {
