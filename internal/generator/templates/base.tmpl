@@ -1,0 +1,48 @@
+{{define "base"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.SEOTitle}}</title>
+{{if .SEODesc}}<meta name="description" content="{{.SEODesc}}">{{end}}
+{{if .Canon}}<link rel="canonical" href="{{.Canon}}">{{end}}
+<meta property="og:title" content="{{.SEOTitle}}">
+{{if .SEODesc}}<meta property="og:description" content="{{.SEODesc}}">{{end}}
+<link rel="stylesheet" href="{{.Site.BasePath}}/styles.css">
+<style>:root{--primary:{{.Site.Settings.PrimaryColor}};}</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="{{.Site.BasePath}}/">
+      {{if .Site.LogoURL}}<img class="logo" src="{{.Site.LogoURL}}" alt="{{.Site.Name}}">{{end}}
+      <span>{{.Site.Name}}</span>
+    </a>
+    <nav class="nav">
+      {{range .Site.Nav}}<a href="{{.Href}}">{{.Title}}</a>{{end}}
+    </nav>
+  </div>
+</header>
+<main>
+{{range .Sections}}{{template "block" .}}{{end}}
+</main>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <strong>{{.Site.Name}}</strong>
+      {{with .Site.Settings.FooterText}}<p>{{.}}</p>{{end}}
+    </div>
+    <div class="footer-contact">
+      {{with .Site.Settings.ContactPhone}}<p>Phone: <a href="{{telURL .}}">{{.}}</a></p>{{end}}
+      {{with .Site.Settings.ContactEmail}}<p>Email: <a href="mailto:{{. | safeURL}}">{{.}}</a></p>{{end}}
+      {{with .Site.Settings.Address}}<p>{{.}}</p>{{end}}
+    </div>
+    <div class="footer-social">
+      {{range $name, $url := .Site.Settings.SocialLinks}}{{if $url}}<a href="{{$url}}" rel="noopener" target="_blank">{{$name}}</a>{{end}}{{end}}
+    </div>
+  </div>
+  <div class="container copyright">© {{.Site.Year}} {{.Site.Name}}</div>
+</footer>
+</body>
+</html>
+{{end}}

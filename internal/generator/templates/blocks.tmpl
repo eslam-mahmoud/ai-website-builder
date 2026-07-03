@@ -1,0 +1,62 @@
+{{define "block"}}
+{{if eq .Variant "banner"}}
+<section class="hero align-{{or .Align "center"}}"{{with .BGImage}} style="background-image:linear-gradient(rgba(15,23,42,.55),rgba(15,23,42,.55)),url('{{. | safeURL}}')"{{end}}>
+  <div class="container">
+    {{range .Fields}}{{if eq .Kind "heading"}}<h1>{{.Text}}</h1>
+    {{else if eq .Kind "text"}}<p class="hero-subtitle">{{.Text}}</p>
+    {{else if eq .Kind "textarea"}}<p class="hero-subtitle">{{nl2br .Text}}</p>
+    {{else if eq .Kind "button"}}<a class="btn" href="{{safeHref .URL}}">{{.Text}}</a>
+    {{else if eq .Kind "image"}}<img class="block-image" src="{{.ImageURL}}" alt="{{.ImageAlt}}">
+    {{end}}{{end}}
+  </div>
+</section>
+{{else if eq .Variant "cta"}}
+<section class="section cta-section">
+  <div class="container">
+    {{range .Fields}}{{if eq .Kind "heading"}}<h2>{{.Text}}</h2>
+    {{else if eq .Kind "text"}}<p>{{.Text}}</p>
+    {{else if eq .Kind "textarea"}}<p>{{nl2br .Text}}</p>
+    {{else if eq .Kind "button"}}<a class="btn" href="{{safeHref .URL}}">{{.Text}}</a>
+    {{end}}{{end}}
+  </div>
+</section>
+{{else}}
+<section class="section variant-{{.Variant}}{{if eq .BG "alt"}} bg-alt{{end}}{{if eq .BG "primary"}} bg-primary{{end}}{{if .Align}} align-{{.Align}}{{end}}">
+  <div class="container{{if not .HasItems}} narrow{{end}}">
+    {{range .Fields}}{{if eq .Kind "heading"}}<h2>{{.Text}}</h2>
+    {{else if eq .Kind "text"}}<p>{{.Text}}</p>
+    {{else if eq .Kind "textarea"}}<p>{{nl2br .Text}}</p>
+    {{else if eq .Kind "image"}}<figure class="block-figure"><img src="{{.ImageURL}}" alt="{{.ImageAlt}}"></figure>
+    {{else if eq .Kind "button"}}<p><a class="btn" href="{{safeHref .URL}}">{{.Text}}</a></p>
+    {{else if eq .Kind "contact"}}
+    <ul class="contact-details">
+      {{with $.Site.Settings.ContactPhone}}<li><strong>Phone:</strong> <a href="{{telURL .}}">{{.}}</a></li>{{end}}
+      {{with $.Site.Settings.ContactEmail}}<li><strong>Email:</strong> <a href="mailto:{{. | safeURL}}">{{.}}</a></li>{{end}}
+      {{with $.Site.Settings.WhatsappNumber}}<li><strong>WhatsApp:</strong> <a href="{{printf "https://wa.me/%s" . | safeURL}}">{{.}}</a></li>{{end}}
+      {{with $.Site.Settings.Address}}<li><strong>Address:</strong> {{.}}</li>{{end}}
+    </ul>
+    {{else if eq .Kind "items"}}
+      {{if eq $.Variant "gallery"}}
+      <div class="gallery">
+        {{range .Items}}<figure>{{range .Fields}}{{if eq .Kind "image"}}<img src="{{.ImageURL}}" alt="{{.ImageAlt}}" loading="lazy">{{else if eq .Kind "caption"}}<figcaption>{{.Text}}</figcaption>{{end}}{{end}}</figure>
+        {{end}}
+      </div>
+      {{else if eq $.Variant "accordion"}}
+      {{range .Items}}<details>
+        <summary>{{.Summary}}</summary>
+        {{range .Fields}}{{if eq .Kind "textarea"}}<p>{{nl2br .Text}}</p>{{else if eq .Kind "text"}}<p>{{.Text}}</p>{{else if eq .Kind "image"}}<img src="{{.ImageURL}}" alt="{{.ImageAlt}}">{{else if eq .Kind "button"}}<a class="btn" href="{{safeHref .URL}}">{{.Text}}</a>{{end}}{{end}}
+      </details>
+      {{end}}
+      {{else}}
+      <div class="cards">
+        {{range .Items}}<div class="card">
+          {{range .Fields}}{{if eq .Kind "image"}}<img src="{{.ImageURL}}" alt="{{.ImageAlt}}">{{else if eq .Kind "title"}}<h3>{{.Text}}</h3>{{else if eq .Kind "text"}}<p class="card-meta">{{.Text}}</p>{{else if eq .Kind "textarea"}}<p>{{nl2br .Text}}</p>{{else if eq .Kind "button"}}<a class="btn" href="{{safeHref .URL}}">{{.Text}}</a>{{end}}{{end}}
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+    {{end}}{{end}}
+  </div>
+</section>
+{{end}}
+{{end}}

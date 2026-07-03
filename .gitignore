@@ -1,0 +1,6 @@
+# Secrets — never commit
+.env
+
+# Build artifacts and runtime data
+bin/
+var/
